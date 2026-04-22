@@ -1,3 +1,12 @@
+---
+title: Emotion Pro
+emoji: 😊
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+pinned: false
+---
+
 # Emotion Pro
 
 Real-time facial emotion detection web app built with Flask, Socket.IO, and ONNX Runtime.
@@ -70,8 +79,8 @@ python main.py
 
 ```bash
 docker build -t emotion-pro .
-docker run -p 5002:5002 emotion-pro
-# Open http://localhost:5002
+docker run -p 7860:7860 emotion-pro
+# Open http://localhost:7860
 ```
 
 ## Environment Variables
@@ -79,7 +88,7 @@ docker run -p 5002:5002 emotion-pro
 | Variable | Default | Description |
 |---|---|---|
 | `SECRET_KEY` | `emotion-pro-2024` | Flask session secret |
-| `PORT` | `5002` | Port to run the server on |
+| `PORT` | `7860` | Port to run the server on (HuggingFace Spaces uses 7860) |
 
 ## License
 
