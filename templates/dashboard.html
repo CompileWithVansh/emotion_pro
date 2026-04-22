@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Pro — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app">
+    <nav class="sidenav">
+        <div class="sidenav-logo"><span class="logo-dot"></span>EP</div>
+        <a href="/" class="nav-item" title="Live Detector">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/></svg>
+        </a>
+        <a href="/dashboard" class="nav-item active" title="Dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </a>
+        <a href="/history" class="nav-item" title="History">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+        </a>
+        <a href="#" class="nav-item" id="nav-export" title="Export CSV">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+    </nav>
+
+    <div class="content">
+        <div class="topbar">
+            <div>
+                <h2 class="page-title">Analytics Dashboard</h2>
+                <p class="page-sub">Your emotion detection overview</p>
+            </div>
+            <div class="topbar-right">
+                <a href="#" class="btn-outline" id="btn-export">Export CSV</a>
+            </div>
+        </div>
+
+        <div class="overview-grid">
+            <div class="card stat-overview"><p class="card-label">Total Sessions</p><p class="stat-big" id="ov-sessions">—</p></div>
+            <div class="card stat-overview"><p class="card-label">Total Detections</p><p class="stat-big" id="ov-detections">—</p></div>
+            <div class="card stat-overview"><p class="card-label">Alerts Triggered</p><p class="stat-big" id="ov-alerts">—</p></div>
+            <div class="card stat-overview"><p class="card-label">Top Emotion</p><p class="stat-big" id="ov-top">—</p></div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="card chart-card">
+                <p class="card-label">Activity — Last 7 Days</p>
+                <canvas id="activityChart" height="180"></canvas>
+            </div>
+            <div class="card chart-card">
+                <p class="card-label">Emotion Distribution</p>
+                <canvas id="distChart" height="180"></canvas>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top:1.25rem">
+            <p class="card-label" style="margin-bottom:14px">Recent Alerts</p>
+            <table class="data-table">
+                <thead><tr><th>Emotion</th><th>Duration</th><th>Triggered At</th><th>Session</th></tr></thead>
+                <tbody id="alerts-body"><tr><td colspan="4" style="text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+const BROWSER_ID = (() => {
+    let id = localStorage.getItem('ep_browser_id');
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem('ep_browser_id', id); }
+    return id;
+})();
+
+const COLORS = {
+    Angry:'#ef4444', Disgust:'#84cc16', Fear:'#f59e0b',
+    Happy:'#22c55e', Sad:'#3b82f6', Surprise:'#a855f7', Neutral:'#94a3b8'
+};
+
+document.getElementById('nav-export').addEventListener('click', e => {
+    e.preventDefault(); window.location.href = `/api/export/csv?browser_id=${BROWSER_ID}`; });
+document.getElementById('btn-export').addEventListener('click', e => {
+    e.preventDefault(); window.location.href = `/api/export/csv?browser_id=${BROWSER_ID}`; });
+
+async function loadDashboard() {
+    const res  = await fetch(`/api/stats/overview?browser_id=${BROWSER_ID}`);
+    const data = await res.json();
+
+    document.getElementById('ov-sessions').textContent   = data.total_sessions;
+    document.getElementById('ov-detections').textContent = data.total_detections.toLocaleString();
+    document.getElementById('ov-alerts').textContent     = data.total_alerts;
+
+    const dist = data.emotion_distribution;
+    const top  = Object.keys(dist).length
+        ? Object.keys(dist).reduce((a,b) => dist[a] > dist[b] ? a : b) : '—';
+    document.getElementById('ov-top').textContent = top;
+
+    new Chart(document.getElementById('activityChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: data.last_7_days.map(d => d.date),
+            datasets: [{ label: 'Detections', data: data.last_7_days.map(d => d.count),
+                backgroundColor: 'rgba(99,102,241,0.7)', borderRadius: 6 }]
+        },
+        options: { plugins: { legend: { display: false } },
+            scales: { x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } },
+                      y: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8', font: { size: 11 } } } } }
+    });
+
+    const labels = Object.keys(dist);
+    new Chart(document.getElementById('distChart').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: Object.values(dist),
+            backgroundColor: labels.map(l => COLORS[l] || '#94a3b8'),
+            borderWidth: 2, borderColor: '#fff' }] },
+        options: { cutout: '65%', plugins: { legend: {
+            position: 'right', labels: { color: '#1e293b', font: { size: 12 }, padding: 12 } } } }
+    });
+}
+
+async function loadAlerts() {
+    const res    = await fetch(`/api/alerts?browser_id=${BROWSER_ID}`);
+    const alerts = await res.json();
+    const tbody  = document.getElementById('alerts-body');
+    if (!alerts.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted)">No alerts yet</td></tr>';
+        return;
+    }
+    tbody.innerHTML = alerts.map(a => `
+        <tr>
+            <td><span class="emotion-tag" style="background:${COLORS[a.emotion]}20;color:${COLORS[a.emotion]}">${a.emotion}</span></td>
+            <td>${a.duration}s</td>
+            <td>${a.triggered_at}</td>
+            <td style="font-family:monospace;font-size:0.8rem">${a.session_id.slice(0,8)}...</td>
+        </tr>`).join('');
+}
+
+loadDashboard();
+loadAlerts();
+</script>
+</body>
+</html>

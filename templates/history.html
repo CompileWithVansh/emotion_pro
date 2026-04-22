@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Pro — History</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app">
+    <nav class="sidenav">
+        <div class="sidenav-logo"><span class="logo-dot"></span>EP</div>
+        <a href="/" class="nav-item" title="Live Detector">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/></svg>
+        </a>
+        <a href="/dashboard" class="nav-item" title="Dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </a>
+        <a href="/history" class="nav-item active" title="History">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+        </a>
+        <a href="#" class="nav-item" id="nav-export" title="Export CSV">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+    </nav>
+
+    <div class="content">
+        <div class="topbar">
+            <div>
+                <h2 class="page-title">Session History</h2>
+                <p class="page-sub">Browse and analyze past detection sessions</p>
+            </div>
+        </div>
+
+        <div class="history-layout">
+            <div class="card sessions-list-card">
+                <p class="card-label" style="margin-bottom:14px">All Sessions</p>
+                <div id="sessions-list"><p style="color:var(--muted);font-size:0.9rem">Loading...</p></div>
+                <div class="pagination" id="pagination"></div>
+            </div>
+
+            <div class="card session-detail-card">
+                <div class="detail-empty" id="detail-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+                    <p>Select a session to view details</p>
+                </div>
+                <div id="detail-content" style="display:none">
+                    <p class="card-label" style="margin-bottom:4px">Session Detail</p>
+                    <p class="detail-session-id" id="detail-id"></p>
+                    <div class="detail-charts">
+                        <div>
+                            <p class="card-label" style="margin:14px 0 8px">Emotion Distribution</p>
+                            <canvas id="detailDist" height="160"></canvas>
+                        </div>
+                        <div>
+                            <p class="card-label" style="margin:14px 0 8px">Confidence Timeline</p>
+                            <canvas id="detailTimeline" height="160"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const BROWSER_ID = (() => {
+    let id = localStorage.getItem('ep_browser_id');
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem('ep_browser_id', id); }
+    return id;
+})();
+
+const COLORS = {
+    Angry:'#ef4444', Disgust:'#84cc16', Fear:'#f59e0b',
+    Happy:'#22c55e', Sad:'#3b82f6', Surprise:'#a855f7', Neutral:'#94a3b8'
+};
+
+document.getElementById('nav-export').addEventListener('click', e => {
+    e.preventDefault(); window.location.href = `/api/export/csv?browser_id=${BROWSER_ID}`; });
+
+let distChart = null, timelineChart = null;
+
+async function loadSessions(page = 1) {
+    const res  = await fetch(`/api/history/sessions?browser_id=${BROWSER_ID}&page=${page}`);
+    const data = await res.json();
+    const list = document.getElementById('sessions-list');
+
+    if (!data.sessions.length) {
+        list.innerHTML = '<p style="color:var(--muted);font-size:0.9rem">No sessions yet. Start a detection session first.</p>';
+        return;
+    }
+    list.innerHTML = data.sessions.map(s => `
+        <div class="session-row" onclick="loadDetail('${s.id}', this)">
+            <div class="session-row-top">
+                <span class="session-date">${s.started_at}</span>
+                <span class="emotion-tag" style="background:${(COLORS[s.dominant_emotion]||'#94a3b8')}20;color:${COLORS[s.dominant_emotion]||'#94a3b8'}">${s.dominant_emotion}</span>
+            </div>
+            <div class="session-row-meta">
+                <span>${s.total_frames} frames</span>
+                <span>${s.duration ? s.duration + 's' : s.ended_at}</span>
+            </div>
+        </div>`).join('');
+
+    const pg = document.getElementById('pagination');
+    pg.innerHTML = '';
+    if (data.pages > 1) {
+        for (let i = 1; i <= data.pages; i++) {
+            const btn = document.createElement('button');
+            btn.textContent = i; btn.className = 'page-btn' + (i === page ? ' active' : '');
+            btn.onclick = () => loadSessions(i);
+            pg.appendChild(btn);
+        }
+    }
+}
+
+async function loadDetail(sessionId, rowEl) {
+    document.querySelectorAll('.session-row').forEach(r => r.classList.remove('selected'));
+    rowEl.classList.add('selected');
+    const res  = await fetch(`/api/history/session/${sessionId}`);
+    const data = await res.json();
+
+    document.getElementById('detail-empty').style.display   = 'none';
+    document.getElementById('detail-content').style.display = '';
+    document.getElementById('detail-id').textContent = 'ID: ' + sessionId;
+
+    if (distChart)     distChart.destroy();
+    if (timelineChart) timelineChart.destroy();
+
+    const labels = Object.keys(data.distribution);
+    distChart = new Chart(document.getElementById('detailDist').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: Object.values(data.distribution),
+            backgroundColor: labels.map(l => COLORS[l] || '#94a3b8'),
+            borderWidth: 2, borderColor: '#fff' }] },
+        options: { cutout: '60%', plugins: { legend: {
+            position: 'bottom', labels: { color: '#1e293b', font: { size: 11 }, padding: 8 } } } }
+    });
+
+    const last30 = data.timeline.slice(-30);
+    timelineChart = new Chart(document.getElementById('detailTimeline').getContext('2d'), {
+        type: 'line',
+        data: { labels: last30.map(p => p.time), datasets: [{
+            label: 'Confidence %', data: last30.map(p => p.confidence),
+            borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)',
+            borderWidth: 2, pointRadius: 3, tension: 0.4, fill: true }] },
+        options: { plugins: { legend: { display: false } },
+            scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 }, maxRotation: 45 }, grid: { display: false } },
+                      y: { min: 0, max: 100, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#f1f5f9' } } } }
+    });
+}
+
+loadSessions();
+</script>
+</body>
+</html>

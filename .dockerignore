@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.env
+.venv
+venv/
+instance/
+*.db
+.git
+.gitignore
+README.md

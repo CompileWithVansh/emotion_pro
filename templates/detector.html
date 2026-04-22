@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Pro — Live Detector</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app">
+    <nav class="sidenav">
+        <div class="sidenav-logo"><span class="logo-dot"></span>EP</div>
+        <a href="/" class="nav-item active" title="Live Detector">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/></svg>
+        </a>
+        <a href="/dashboard" class="nav-item" title="Dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </a>
+        <a href="/history" class="nav-item" title="History">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+        </a>
+        <a href="#" class="nav-item" title="Export CSV" id="nav-export">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+    </nav>
+
+    <div class="content">
+        <div class="topbar">
+            <div>
+                <h2 class="page-title">Live Detector</h2>
+                <p class="page-sub">Real-time facial emotion recognition</p>
+            </div>
+            <div class="topbar-right">
+                <div class="live-indicator">
+                    <span class="live-dot" id="live-dot"></span>
+                    <span id="live-text">Offline</span>
+                </div>
+                <button class="btn-primary" id="btn-start">Start Session</button>
+                <button class="btn-outline" id="btn-stop" style="display:none">End Session</button>
+            </div>
+        </div>
+
+        <div class="alert-banner" id="alert-banner" style="display:none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span id="alert-text"></span>
+            <button onclick="document.getElementById('alert-banner').style.display='none'">✕</button>
+        </div>
+
+        <div class="detector-grid">
+            <div class="card video-card">
+                <div class="card-header">
+                    <span class="card-title">Camera Feed</span>
+                    <span class="session-badge" id="session-badge">No Session</span>
+                </div>
+                <div class="video-wrap">
+                    <video id="videoElement" autoplay playsinline muted></video>
+                    <canvas id="overlayCanvas"></canvas>
+                    <div class="video-placeholder" id="video-placeholder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                        <p>Start a session to begin</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="card">
+                    <p class="card-label">Current Emotion</p>
+                    <div id="emotion-display" class="emotion-big">—</div>
+                    <div class="conf-row">
+                        <div class="conf-track"><div id="conf-fill" class="conf-fill"></div></div>
+                        <span id="conf-text" class="conf-label">0%</span>
+                    </div>
+                    <div class="mini-stats">
+                        <div class="mini-stat"><span class="mini-label">Faces</span><span class="mini-val" id="faces-count">0</span></div>
+                        <div class="mini-stat"><span class="mini-label">Frames</span><span class="mini-val" id="frame-count">0</span></div>
+                        <div class="mini-stat"><span class="mini-label">Alerts</span><span class="mini-val" id="alert-count">0</span></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <p class="card-label">Live Confidence</p>
+                    <canvas id="liveChart" height="120"></canvas>
+                </div>
+
+                <div class="card">
+                    <p class="card-label">Emotion Breakdown</p>
+                    <div class="pills-wrap">
+                        <span class="pill" data-e="Happy">😊 Happy</span>
+                        <span class="pill" data-e="Sad">😢 Sad</span>
+                        <span class="pill" data-e="Angry">😠 Angry</span>
+                        <span class="pill" data-e="Fear">😨 Fear</span>
+                        <span class="pill" data-e="Surprise">😲 Surprise</span>
+                        <span class="pill" data-e="Disgust">🤢 Disgust</span>
+                        <span class="pill" data-e="Neutral">😐 Neutral</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <p class="card-label">Detection Settings</p>
+                    <div class="settings-grid">
+                        <div class="setting-row">
+                            <label>Scale Factor <span id="sf-val">1.1</span></label>
+                            <input type="range" id="scale-factor" min="1.05" max="1.5" step="0.05" value="1.1">
+                        </div>
+                        <div class="setting-row">
+                            <label>Min Neighbors <span id="mn-val">5</span></label>
+                            <input type="range" id="min-neighbors" min="1" max="10" step="1" value="5">
+                        </div>
+                        <div class="setting-row">
+                            <label>Frame Rate <span id="fr-val">50ms</span></label>
+                            <input type="range" id="frame-rate" min="30" max="200" step="10" value="50">
+                        </div>
+                    </div>
+                    <button class="btn-outline full" id="btn-save-settings" style="margin-top:10px">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<canvas id="hiddenCanvas" style="display:none"></canvas>
+
+<script>
+// Persistent browser identity — stored in localStorage, survives page refresh
+const BROWSER_ID = (() => {
+    let id = localStorage.getItem('ep_browser_id');
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem('ep_browser_id', id); }
+    return id;
+})();
+
+const socket = io();
+const video   = document.getElementById('videoElement');
+const overlay = document.getElementById('overlayCanvas');
+const ctx     = overlay.getContext('2d');
+const hidden  = document.getElementById('hiddenCanvas');
+const ctxH    = hidden.getContext('2d', { willReadFrequently: true });
+
+let sessionId = null, frameCount = 0, alertCount = 0, frameInterval = 50, isRunning = false;
+
+const COLORS = {
+    Angry:'#ef4444', Disgust:'#84cc16', Fear:'#f59e0b',
+    Happy:'#22c55e', Sad:'#3b82f6', Surprise:'#a855f7',
+    Neutral:'#94a3b8', 'No Face Detected':'#cbd5e1'
+};
+
+// Live chart
+const liveChart = new Chart(document.getElementById('liveChart').getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: [{ label: 'Confidence', data: [],
+        borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)',
+        borderWidth: 2, pointRadius: 0, tension: 0.4, fill: true }] },
+    options: { animation: false, plugins: { legend: { display: false } },
+        scales: { x: { display: false },
+            y: { min: 0, max: 100, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#f1f5f9' } } } }
+});
+
+function pushChart(val) {
+    const d = liveChart.data;
+    d.labels.push(''); d.datasets[0].data.push(val);
+    if (d.labels.length > 40) { d.labels.shift(); d.datasets[0].data.shift(); }
+    liveChart.update('none');
+}
+
+document.getElementById('btn-start').addEventListener('click', async () => {
+    const res  = await fetch('/api/session/start', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ browser_id: BROWSER_ID })
+    });
+    const data = await res.json();
+    sessionId  = data.session_id;
+    socket.emit('join_session', { session_id: sessionId });
+    document.getElementById('session-badge').textContent = 'Session: ' + sessionId.slice(0,8) + '...';
+    document.getElementById('btn-start').style.display = 'none';
+    document.getElementById('btn-stop').style.display  = '';
+    document.getElementById('video-placeholder').style.display = 'none';
+    isRunning = true;
+    initCamera();
+});
+
+document.getElementById('btn-stop').addEventListener('click', async () => {
+    isRunning = false;
+    await fetch('/api/session/end', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ session_id: sessionId })
+    });
+    sessionId = null;
+    document.getElementById('btn-start').style.display = '';
+    document.getElementById('btn-stop').style.display  = 'none';
+    document.getElementById('live-dot').classList.remove('active');
+    document.getElementById('live-text').textContent = 'Offline';
+    document.getElementById('session-badge').textContent = 'No Session';
+    document.getElementById('video-placeholder').style.display = '';
+    document.getElementById('emotion-display').textContent = '—';
+    document.getElementById('emotion-display').style.color = '';
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+});
+
+async function initCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia(
+            { video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } });
+        video.srcObject = stream;
+        document.getElementById('live-dot').classList.add('active');
+        document.getElementById('live-text').textContent = 'Live';
+        video.onloadedmetadata = () => {
+            overlay.width = video.videoWidth; overlay.height = video.videoHeight;
+            hidden.width  = video.videoWidth; hidden.height  = video.videoHeight;
+            setTimeout(sendFrame, 100);
+        };
+    } catch(e) { console.error(e); }
+}
+
+function sendFrame() {
+    if (!isRunning || !sessionId || video.videoWidth === 0) return;
+    ctxH.drawImage(video, 0, 0, hidden.width, hidden.height);
+    socket.emit('process_image', {
+        session_id: sessionId, browser_id: BROWSER_ID,
+        image: hidden.toDataURL('image/jpeg', 0.5)
+    });
+}
+
+socket.on('result', (data) => {
+    if (!isRunning) return;
+    setTimeout(sendFrame, data.frame_interval || frameInterval);
+    const { emotion, confidence, faces_count } = data.stats;
+    const conf  = (confidence * 100).toFixed(1);
+    const color = COLORS[emotion] || '#94a3b8';
+
+    document.getElementById('emotion-display').textContent = emotion;
+    document.getElementById('emotion-display').style.color = color;
+    document.getElementById('conf-fill').style.width      = conf + '%';
+    document.getElementById('conf-fill').style.background = color;
+    document.getElementById('conf-text').textContent      = conf + '%';
+    document.getElementById('faces-count').textContent    = faces_count;
+    document.getElementById('frame-count').textContent    = ++frameCount;
+    pushChart(parseFloat(conf));
+
+    document.querySelectorAll('.pill').forEach(p =>
+        p.classList.toggle('active', p.dataset.e === emotion));
+
+    if (data.alert) {
+        alertCount++;
+        document.getElementById('alert-count').textContent = alertCount;
+        document.getElementById('alert-text').textContent =
+            `⚠ ${data.alert.emotion} detected for ${data.alert.duration}s`;
+        document.getElementById('alert-banner').style.display = 'flex';
+        setTimeout(() => document.getElementById('alert-banner').style.display = 'none', 8000);
+    }
+
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    ctx.lineWidth = 3; ctx.font = '13px Inter, sans-serif';
+    const len = 18;
+    data.faces.forEach(face => {
+        const fc = COLORS[face.emotion] || '#94a3b8';
+        ctx.strokeStyle = fc; ctx.fillStyle = fc;
+        let x = overlay.width - face.x - face.w, y = face.y, w = face.w, h = face.h;
+        ctx.beginPath(); ctx.moveTo(x,y+len); ctx.lineTo(x,y); ctx.lineTo(x+len,y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x+w-len,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+len); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x,y+h-len); ctx.lineTo(x,y+h); ctx.lineTo(x+len,y+h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x+w-len,y+h); ctx.lineTo(x+w,y+h); ctx.lineTo(x+w,y+h-len); ctx.stroke();
+        const tw = ctx.measureText(face.emotion).width;
+        ctx.globalAlpha = 0.7; ctx.fillRect(x, y-28, tw+16, 24);
+        ctx.globalAlpha = 1;   ctx.fillStyle = '#fff'; ctx.fillText(face.emotion, x+8, y-10);
+    });
+});
+
+// Settings
+document.getElementById('scale-factor').addEventListener('input', function() {
+    document.getElementById('sf-val').textContent = this.value; });
+document.getElementById('min-neighbors').addEventListener('input', function() {
+    document.getElementById('mn-val').textContent = this.value; });
+document.getElementById('frame-rate').addEventListener('input', function() {
+    document.getElementById('fr-val').textContent = this.value + 'ms';
+    frameInterval = parseInt(this.value); });
+document.getElementById('btn-save-settings').addEventListener('click', async () => {
+    await fetch('/api/settings', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            session_id: sessionId || 'default',
+            scale_factor: parseFloat(document.getElementById('scale-factor').value),
+            min_neighbors: parseInt(document.getElementById('min-neighbors').value),
+            frame_interval: parseInt(document.getElementById('frame-rate').value),
+        })
+    });
+    const btn = document.getElementById('btn-save-settings');
+    btn.textContent = 'Saved ✓';
+    setTimeout(() => btn.textContent = 'Save Settings', 2000);
+});
+
+// Export
+document.getElementById('nav-export').addEventListener('click', (e) => {
+    e.preventDefault();
+    window.location.href = `/api/export/csv?browser_id=${BROWSER_ID}`;
+});
+</script>
+</body>
+</html>
