@@ -80,14 +80,22 @@ function initThemeToggle() {
     const btn  = document.getElementById('theme-toggle');
     const moon = document.getElementById('icon-moon');
     const sun  = document.getElementById('icon-sun');
+    
+    if (!btn || !moon || !sun) return; // Safety check
+    
     function apply(dark) {
         document.body.classList.toggle('dark', dark);
         moon.style.display = dark ? 'none' : '';
         sun.style.display  = dark ? '' : 'none';
         localStorage.setItem('ep_theme', dark ? 'dark' : 'light');
     }
+    
     apply(document.body.classList.contains('dark'));
-    btn.addEventListener('click', () => apply(!document.body.classList.contains('dark')));
+    
+    // Remove old listener if exists, then add new one
+    btn.replaceWith(btn.cloneNode(true));
+    const newBtn = document.getElementById('theme-toggle');
+    newBtn.addEventListener('click', () => apply(!document.body.classList.contains('dark')));
 }
 initThemeToggle();
 
