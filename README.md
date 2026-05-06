@@ -16,8 +16,11 @@ Real-time facial emotion detection web app built with Flask, Socket.IO, and ONNX
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 Deployment Link : https://huggingface.co/spaces/vanshgupta7017/emotion_detector
+
 Srs link : https://drive.google.com/file/d/1gwXMgO7kTN6-iWkK3pgPXHhYGIn9RSLw/view?usp=sharing
+
 Report Link : https://drive.google.com/file/d/1Hqp6DeiANCTL-4aarRURMoCCT-z51AN1/view?usp=sharing
+
 Presentation link : https://docs.google.com/presentation/d/18Ck8api44jpPny0BctpYpsvs3uc2xXLO/edit?usp=drivesdk&ouid=108935339502030270560&rtpof=true&sd=true
 
 
