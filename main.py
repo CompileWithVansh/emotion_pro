@@ -20,16 +20,18 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.environ.get("SECRET_KEY", "emotion-pro-2024")
 
-# Writable DB path: /tmp always works on any container
-_db_path = os.path.join("/tmp", "emotion_pro.db")
+# Writable DB path: Works on Windows and Linux
+_here = os.path.dirname(os.path.abspath(__file__))
+_db_dir = os.path.join(_here, "instance")
+os.makedirs(_db_dir, exist_ok=True)
+_db_path = os.path.join(_db_dir, "emotion_pro.db")
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{_db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # ── ML Model ──────────────────────────────────────────────────────────────────
-_here = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(_here, "fer2013_mini_XCEPTION.onnx")
 if not os.path.exists(MODEL_PATH):
     MODEL_PATH = os.path.join(_here, "..", "fer2013_mini_XCEPTION.onnx")
@@ -98,6 +100,9 @@ def history():
 
 
 # ── REST API ──────────────────────────────────────────────────────────────────
+
+
+# Nayi emotion detection session start karta hai.
 @app.route("/api/session/start", methods=["POST"])
 def api_session_start():
     browser_id = request.json.get("browser_id", "unknown")
@@ -106,9 +111,10 @@ def api_session_start():
     db.session.commit()
     return jsonify({"session_id": s.id})
 
-
+# Current session ko stop karta hai.
 @app.route("/api/session/end", methods=["POST"])
 def api_session_end():
+    
     sid = request.json.get("session_id")
     if sid:
         s = DetectionSession.query.get(sid)
@@ -119,8 +125,10 @@ def api_session_end():
     return jsonify({"status": "ended"})
 
 
+# Dashboard ke liye overall analytics bhejti hai. Isme total sessions, detections, alerts, emotion distribution, aur last 7 din ka trend hota hai.
 @app.route("/api/stats/overview")
 def api_stats_overview():
+    
     browser_id = request.args.get("browser_id", "")
     sessions = DetectionSession.query.filter_by(browser_id=browser_id).all()
     sids = [s.id for s in sessions]
@@ -153,6 +161,7 @@ def api_stats_overview():
     })
 
 
+# Purani sessions ki history deta hai. Isme pagination hoti hai aur har session ke liye dominant emotion, duration, aur total frames hota hai.
 @app.route("/api/history/sessions")
 def api_history_sessions():
     browser_id = request.args.get("browser_id", "")
@@ -180,7 +189,7 @@ def api_history_sessions():
         })
     return jsonify({"sessions": result, "total": q.total, "pages": q.pages})
 
-
+# Ek specific session ke detailed logs deta hai. Isme har detection ka timestamp, emotion, confidence, aur face count hota hai. Saath hi emotion distribution bhi hota hai.
 @app.route("/api/history/session/<session_id>")
 def api_session_detail(session_id):
     logs = EmotionLog.query.filter_by(session_id=session_id)\
@@ -193,7 +202,7 @@ def api_session_detail(session_id):
                  "confidence": round(l.confidence * 100, 1)} for l in logs]
     return jsonify({"timeline": timeline, "distribution": dict(dist)})
 
-
+# Recent alerts ki list deta hai. Isme har alert ke liye emotion, duration, triggered time, aur session ID hota hai.
 @app.route("/api/alerts")
 def api_alerts():
     browser_id = request.args.get("browser_id", "")
@@ -207,6 +216,7 @@ def api_alerts():
     } for a in alerts])
 
 
+# Emotion detection data ko CSV format me export karta hai. Isme timestamp, session ID, emotion, confidence, aur face count hota hai.
 @app.route("/api/export/csv")
 def api_export_csv():
     browser_id = request.args.get("browser_id", "")
@@ -224,6 +234,7 @@ def api_export_csv():
                     headers={"Content-Disposition": "attachment; filename=emotion_data.csv"})
 
 
+# Detection parameters ko get ya update karta hai. Isme scale factor, min neighbors, aur frame interval hota hai.
 @app.route("/api/settings", methods=["GET", "POST"])
 def api_settings():
     sid = request.json.get("session_id", "default") if request.method == "POST" else \
